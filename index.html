@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoilWatch</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0a0e14; color: #e6edf3; font-family: monospace; padding: 20px; }
+    h1 { font-size: 24px; margin-bottom: 20px; color: #3fb950; }
+    .card { background: #0d1117; border: 1px solid #21262d; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+    .big { font-size: 48px; font-weight: bold; }
+    .label { font-size: 12px; color: #484f58; margin-bottom: 8px; letter-spacing: 1px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    td, th { padding: 10px; text-align: left; border-bottom: 1px solid #21262d; }
+    th { color: #484f58; font-weight: normal; }
+  </style>
+</head>
+<body>
+  <h1>🌿 SoilWatch</h1>
+  <div class="card">
+    <div class="label">CURRENT MOISTURE</div>
+    <div class="big" id="pct">--</div>
+    <div id="status" style="margin-top:8px;font-size:16px;color:#8b949e;">Waiting for device...</div>
+  </div>
+  <div class="card">
+    <div class="label">RECENT READINGS</div>
+    <table>
+      <thead><tr><th>Time</th><th>Moisture</th><th>Status</th><th>Raw ADC</th></tr></thead>
+      <tbody id="table"></tbody>
+    </table>
+  </div>
+  <script>
+    async function refresh() {
+      try {
+        const res = await fetch('/api/reading');
+        const data = await res.json();
+        if (data.length > 0) {
+          const latest = data[data.length - 1];
+          document.getElementById('pct').textContent = latest.moisture_pct + '%';
+          document.getElementById('status').textContent = latest.status;
+          const rows = [...data].reverse().slice(0, 20).map(r => `
+            <tr>
+              <td>${new Date(r.timestamp).toLocaleTimeString()}</td>
+              <td>${r.moisture_pct}%</td>
+              <td>${r.status}</td>
+              <td>${r.raw}</td>
+            </tr>`).join('');
+          document.getElementById('table').innerHTML = rows;
+        }
+      } catch(e) { console.error(e); }
+    }
+    refresh();
+    setInterval(refresh, 5000);
+  </script>
+</body>
+</html>
