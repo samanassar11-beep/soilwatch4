@@ -3,32 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SoilWatch — Live Moisture Monitor</title>
+  <title>SoilWatch</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #0a0e14; color: #e6edf3; font-family: 'DM Mono', 'Courier New', monospace; display: flex; flex-direction: column; align-items: center; padding: 2rem 1rem; min-height: 100vh; }
     @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap');
-    h1 { font-size: 20px; font-weight: 500; color: #5aad6e; letter-spacing: -0.5px; margin-bottom: 0.25rem; }
-    .subtitle { font-size: 11px; color: #484f58; letter-spacing: 1.5px; margin-bottom: 2rem; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0a0e14; color: #e6edf3; font-family: 'DM Mono', monospace; display: flex; flex-direction: column; align-items: center; padding: 2rem 1rem; min-height: 100vh; }
+    h1 { font-size: 20px; font-weight: 500; color: #5aad6e; margin-bottom: 0.2rem; }
+    .subtitle { font-size: 11px; color: #484f58; letter-spacing: 1.5px; margin-bottom: 1.5rem; }
     .plant-wrap { position: relative; width: 220px; height: 340px; margin-bottom: 1.5rem; }
-    .pct-label { position: absolute; top: 52%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
+    .pct-label { position: absolute; top: 52%; left: 50%; transform: translate(-50%,-50%); text-align: center; pointer-events: none; }
     .pct-num { font-size: 30px; font-weight: 500; transition: color 1s; }
     .status-txt { font-size: 11px; letter-spacing: 1.5px; margin-top: 3px; transition: color 1s; color: #484f58; }
-    .scale-bar-wrap { width: 100%; max-width: 300px; margin-bottom: 1.5rem; }
+    .scale-bar-wrap { width: 100%; max-width: 320px; margin-bottom: 1.5rem; }
     .scale-labels { display: flex; justify-content: space-between; font-size: 11px; color: #484f58; margin-bottom: 4px; }
-    .scale-track { height: 6px; background: #161b22; border-radius: 3px; overflow: hidden; }
-    .scale-fill { height: 100%; width: 0%; border-radius: 3px; transition: width 1.2s cubic-bezier(0.4,0,0.2,1), background 1s; }
-    .scale-range { display: flex; justify-content: space-between; font-size: 10px; margin-top: 3px; }
-    .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; width: 100%; max-width: 340px; margin-bottom: 1.5rem; }
+    .scale-track { height: 8px; background: #161b22; border-radius: 4px; overflow: visible; position: relative; }
+    .scale-fill { height: 100%; width: 0%; border-radius: 4px; transition: width 1.2s cubic-bezier(0.4,0,0.2,1), background 1s; }
+    .threshold-marker { position: absolute; top: -4px; width: 2px; height: 16px; background: #f0a500; border-radius: 1px; transition: left 0.5s; }
+    .scale-range { display: flex; justify-content: space-between; font-size: 10px; margin-top: 4px; }
+
+    /* Pump button */
+    .pump-btn { width: 100%; max-width: 320px; padding: 14px; background: #0d2b1a; border: 2px solid #3fb950; border-radius: 10px; color: #3fb950; font-family: 'DM Mono', monospace; font-size: 15px; font-weight: 500; letter-spacing: 1px; cursor: pointer; margin-bottom: 1rem; transition: all 0.2s; }
+    .pump-btn:hover { background: #3fb950; color: #0a0e14; }
+    .pump-btn.pumping { background: #3fb950; color: #0a0e14; animation: pumpPulse 1s ease-in-out infinite; }
+    .pump-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    @keyframes pumpPulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
+
+    /* Settings card */
+    .settings-card { width: 100%; max-width: 320px; background: #0d1117; border: 1px solid #21262d; border-radius: 10px; overflow: hidden; margin-bottom: 1.5rem; }
+    .settings-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #21262d; cursor: pointer; }
+    .settings-title { font-size: 11px; color: #484f58; letter-spacing: 1.5px; }
+    .settings-arrow { font-size: 12px; color: #484f58; transition: transform 0.3s; }
+    .settings-arrow.open { transform: rotate(180deg); }
+    .settings-body { padding: 16px; display: none; }
+    .settings-body.open { display: block; }
+    .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .setting-label { font-size: 12px; color: #8b949e; }
+    .toggle { position: relative; width: 44px; height: 24px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; inset: 0; background: #21262d; border-radius: 24px; cursor: pointer; transition: 0.3s; }
+    .toggle-slider:before { content: ""; position: absolute; width: 18px; height: 18px; left: 3px; bottom: 3px; background: #484f58; border-radius: 50%; transition: 0.3s; }
+    input:checked + .toggle-slider { background: #1a4731; }
+    input:checked + .toggle-slider:before { transform: translateX(20px); background: #3fb950; }
+    .threshold-row { margin-bottom: 6px; }
+    .threshold-val { font-size: 20px; font-weight: 500; color: #f0a500; text-align: center; margin-bottom: 8px; }
+    input[type=range] { width: 100%; accent-color: #f0a500; }
+    .threshold-hint { font-size: 10px; color: #484f58; text-align: center; margin-top: 4px; }
+
+    /* Stats */
+    .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; width: 100%; max-width: 320px; margin-bottom: 1.5rem; }
     .stat { background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 10px; text-align: center; }
     .stat-label { font-size: 10px; color: #484f58; letter-spacing: 1.5px; margin-bottom: 4px; }
-    .stat-val { font-size: 16px; font-weight: 500; color: #e6edf3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .table-card { width: 100%; max-width: 340px; background: #0d1117; border: 1px solid #21262d; border-radius: 10px; overflow: hidden; margin-bottom: 1.5rem; }
+    .stat-val { font-size: 15px; font-weight: 500; color: #e6edf3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Table */
+    .table-card { width: 100%; max-width: 320px; background: #0d1117; border: 1px solid #21262d; border-radius: 10px; overflow: hidden; margin-bottom: 1.5rem; }
     .table-title { font-size: 10px; color: #484f58; letter-spacing: 1.5px; padding: 10px 14px 6px; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th { padding: 6px 14px; text-align: left; color: #484f58; font-weight: 400; border-bottom: 1px solid #21262d; }
-    td { padding: 7px 14px; border-bottom: 1px solid #161b22; }
-    .no-data { padding: 16px 14px; font-size: 12px; color: #484f58; text-align: center; }
+    th { padding: 6px 12px; text-align: left; color: #484f58; font-weight: 400; border-bottom: 1px solid #21262d; }
+    td { padding: 7px 12px; border-bottom: 1px solid #161b22; }
+    .no-data { padding: 16px; font-size: 12px; color: #484f58; text-align: center; }
     .live-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #484f58; }
     .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #484f58; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
@@ -37,13 +70,13 @@
     .live-dot.active { background: #3fb950; animation: pulse 2s ease-in-out infinite; }
     .plant-sway { animation: sway 4s ease-in-out infinite; transform-origin: 50% 100%; }
     .drop { animation: droplet 2s ease-in infinite; }
+    .pump-indicator { font-size: 10px; color: #3fb950; text-align: center; margin-bottom: 8px; min-height: 16px; }
   </style>
 </head>
 <body>
- 
   <h1>🌿 SoilWatch</h1>
   <div class="subtitle">LIVE MOISTURE MONITOR</div>
- 
+
   <div class="plant-wrap">
     <svg width="220" height="340" viewBox="0 0 220 340">
       <defs>
@@ -54,7 +87,6 @@
           <path d="M78 310 L82 295 L138 295 L142 310 L148 330 L72 330 Z"/>
         </clipPath>
       </defs>
- 
       <g class="plant-sway">
         <path d="M110 155 C110 130 110 100 110 70" stroke="#4a7c3f" stroke-width="4" fill="none" stroke-linecap="round"/>
         <path d="M110 120 C95 112 80 108 68 115 C80 120 95 125 110 120" fill="#5aad6e"/>
@@ -64,66 +96,94 @@
         <path d="M110 70 C106 60 101 52 100 44 C104 46 108 50 110 55 C112 50 116 46 120 44 C119 52 114 60 110 70" fill="#e85d30"/>
         <ellipse cx="110" cy="43" rx="4" ry="3" fill="#c94e25"/>
       </g>
- 
       <path d="M110 295 C90 295 72 278 68 258 C64 238 66 210 72 190 C78 170 90 158 110 155 C130 158 142 170 148 190 C154 210 156 238 152 258 C148 278 130 295 110 295Z" fill="#0d1117" stroke="#4a7c3f" stroke-width="2"/>
- 
       <g clip-path="url(#chilli-clip)">
-        <rect id="water-fill" x="60" y="155" width="100" height="140" fill="#3d8fbf" opacity="0.7" style="transform-origin:60px 295px; transform:scaleY(0); transition:transform 1.2s cubic-bezier(0.4,0,0.2,1);"/>
+        <rect id="water-fill" x="60" y="155" width="100" height="140" fill="#3d8fbf" opacity="0.7" style="transform-origin:60px 295px;transform:scaleY(0);transition:transform 1.2s cubic-bezier(0.4,0,0.2,1);"/>
         <ellipse id="water-surface" cx="110" cy="295" rx="50" ry="6" fill="#5aaad4" opacity="0.8" style="transition:cy 1.2s cubic-bezier(0.4,0,0.2,1);"/>
-        <g id="droplets" style="opacity:0; transition:opacity 0.5s;">
+        <g id="droplets" style="opacity:0;transition:opacity 0.5s;">
           <circle cx="95" cy="200" r="3" fill="white" opacity="0.4" class="drop" style="animation-delay:0s"/>
           <circle cx="115" cy="220" r="2" fill="white" opacity="0.4" class="drop" style="animation-delay:0.7s"/>
           <circle cx="100" cy="240" r="2.5" fill="white" opacity="0.4" class="drop" style="animation-delay:1.3s"/>
         </g>
       </g>
- 
       <path d="M110 295 C90 295 72 278 68 258 C64 238 66 210 72 190 C78 170 90 158 110 155 C130 158 142 170 148 190 C154 210 156 238 152 258 C148 278 130 295 110 295Z" fill="none" stroke="#4a7c3f" stroke-width="2.5"/>
- 
       <path d="M78 310 L82 295 L138 295 L142 310 L148 330 L72 330 Z" fill="#8B5E3C" stroke="#6b4423" stroke-width="1.5"/>
       <g clip-path="url(#pot-clip)">
-        <rect id="soil-fill" x="72" y="295" width="76" height="35" fill="#5c3d1e" opacity="0.6" style="transform-origin:72px 330px; transform:scaleY(0); transition:transform 1.2s cubic-bezier(0.4,0,0.2,1);"/>
+        <rect id="soil-fill" x="72" y="295" width="76" height="35" fill="#5c3d1e" opacity="0.6" style="transform-origin:72px 330px;transform:scaleY(0);transition:transform 1.2s cubic-bezier(0.4,0,0.2,1);"/>
       </g>
       <path d="M78 310 L82 295 L138 295 L142 310 L148 330 L72 330 Z" fill="none" stroke="#6b4423" stroke-width="1.5"/>
       <rect x="76" y="294" width="68" height="6" rx="2" fill="#a0724e"/>
     </svg>
- 
     <div class="pct-label">
       <div class="pct-num" id="pct-num">--%</div>
       <div class="status-txt" id="status-txt">WAITING</div>
     </div>
   </div>
- 
+
   <div class="scale-bar-wrap">
     <div class="scale-labels"><span>0%</span><span>50%</span><span>100%</span></div>
-    <div class="scale-track"><div class="scale-fill" id="bar"></div></div>
+    <div class="scale-track">
+      <div class="scale-fill" id="bar"></div>
+      <div class="threshold-marker" id="threshold-marker" style="left:30%"></div>
+    </div>
     <div class="scale-range">
       <span style="color:#e8722a">Very dry</span>
       <span style="color:#5aad6e">Optimal</span>
       <span style="color:#5c6bc0">Very wet</span>
     </div>
   </div>
- 
+
+  <div class="pump-indicator" id="pump-indicator"></div>
+  <button class="pump-btn" id="pump-btn" onclick="manualWater()">💧 WATER NOW</button>
+
+  <!-- Settings -->
+  <div class="settings-card">
+    <div class="settings-header" onclick="toggleSettings()">
+      <span class="settings-title">⚙️ AUTO WATER SETTINGS</span>
+      <span class="settings-arrow" id="settings-arrow">▼</span>
+    </div>
+    <div class="settings-body" id="settings-body">
+      <div class="setting-row">
+        <span class="setting-label">Auto watering</span>
+        <label class="toggle">
+          <input type="checkbox" id="auto-toggle" onchange="updateAutoWater()">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="threshold-row">
+        <div class="setting-label" style="margin-bottom:8px;">Water when moisture below:</div>
+        <div class="threshold-val" id="threshold-display">30%</div>
+        <input type="range" id="threshold-slider" min="10" max="80" value="30" oninput="updateThreshold(this.value)">
+        <div class="threshold-hint">🟡 Yellow marker on bar shows current threshold</div>
+      </div>
+    </div>
+  </div>
+
   <div class="stats">
     <div class="stat"><div class="stat-label">RAW ADC</div><div class="stat-val" id="raw-val">--</div></div>
     <div class="stat"><div class="stat-label">DEVICE</div><div class="stat-val" id="device-val" style="font-size:10px;">--</div></div>
     <div class="stat"><div class="stat-label">READINGS</div><div class="stat-val" id="count-val">0</div></div>
   </div>
- 
+
   <div class="table-card">
     <div class="table-title">RECENT READINGS</div>
     <table>
-      <thead><tr><th>Time</th><th>Moisture</th><th>Status</th></tr></thead>
+      <thead><tr><th>Time</th><th>Moisture</th><th>Status</th><th>Pump</th></tr></thead>
       <tbody id="readings-table"></tbody>
     </table>
     <div class="no-data" id="no-data">Waiting for device...</div>
   </div>
- 
+
   <div class="live-row">
     <div class="live-dot" id="live-dot"></div>
     <span id="live-txt">Awaiting device</span>
   </div>
- 
+
   <script>
+    let currentThreshold = 30;
+    let autoEnabled = false;
+    let isPumping = false;
+
     function getColor(p) {
       if (p < 20) return '#e8722a';
       if (p < 40) return '#d4a843';
@@ -138,6 +198,7 @@
       if (p < 80) return 'MOIST';
       return 'VERY WET';
     }
+
     function updatePlant(pct) {
       const scale = pct / 100;
       const color = getColor(pct);
@@ -154,27 +215,108 @@
       document.getElementById('status-txt').textContent = getLabel(pct);
       document.getElementById('status-txt').style.color = color;
     }
+
+    function updateThresholdMarker(val) {
+      document.getElementById('threshold-marker').style.left = val + '%';
+    }
+
+    function toggleSettings() {
+      const body = document.getElementById('settings-body');
+      const arrow = document.getElementById('settings-arrow');
+      body.classList.toggle('open');
+      arrow.classList.toggle('open');
+    }
+
+    function updateThreshold(val) {
+      currentThreshold = parseInt(val);
+      document.getElementById('threshold-display').textContent = val + '%';
+      updateThresholdMarker(val);
+      sendCommand({ threshold: currentThreshold });
+    }
+
+    function updateAutoWater() {
+      autoEnabled = document.getElementById('auto-toggle').checked;
+      sendCommand({ auto_water: autoEnabled });
+    }
+
+    async function manualWater() {
+      const btn = document.getElementById('pump-btn');
+      btn.disabled = true;
+      btn.classList.add('pumping');
+      btn.textContent = '💧 WATERING...';
+      document.getElementById('pump-indicator').textContent = '🟢 Pump is running (5s)';
+      isPumping = true;
+      await sendCommand({ water: true });
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.classList.remove('pumping');
+        btn.textContent = '💧 WATER NOW';
+        document.getElementById('pump-indicator').textContent = '';
+        isPumping = false;
+      }, 6000);
+    }
+
+    async function sendCommand(cmd) {
+      try {
+        await fetch('/api/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cmd)
+        });
+      } catch(e) { console.error('Command failed:', e); }
+    }
+
     async function fetchReadings() {
       try {
         const res = await fetch('/api/reading');
         if (!res.ok) return;
         const data = await res.json();
         if (!data.length) return;
+
         const latest = data[data.length - 1];
         updatePlant(latest.moisture_pct);
+
         document.getElementById('raw-val').textContent = latest.raw;
         document.getElementById('device-val').textContent = latest.device_id;
         document.getElementById('count-val').textContent = data.length;
         document.getElementById('live-dot').classList.add('active');
         document.getElementById('live-txt').textContent = 'Live — updates every 10s';
         document.getElementById('no-data').style.display = 'none';
+
+        // Sync auto water state from device
+        if (latest.auto_water !== undefined) {
+          document.getElementById('auto-toggle').checked = latest.auto_water;
+          autoEnabled = latest.auto_water;
+        }
+        if (latest.threshold !== undefined) {
+          currentThreshold = latest.threshold;
+          document.getElementById('threshold-slider').value = latest.threshold;
+          document.getElementById('threshold-display').textContent = latest.threshold + '%';
+          updateThresholdMarker(latest.threshold);
+        }
+        if (latest.pump_running && !isPumping) {
+          document.getElementById('pump-indicator').textContent = '🟢 Pump is running...';
+        } else if (!latest.pump_running && !isPumping) {
+          document.getElementById('pump-indicator').textContent = '';
+        }
+
         const rows = [...data].reverse().slice(0, 8).map(r => {
           const c = getColor(r.moisture_pct);
-          return '<tr><td style="color:#6e7681;font-size:11px;">' + new Date(r.timestamp).toLocaleTimeString() + '</td><td style="color:' + c + ';font-weight:500;">' + r.moisture_pct + '%</td><td><span style="background:' + c + '22;color:' + c + ';border:1px solid ' + c + '44;border-radius:4px;padding:1px 7px;font-size:10px;">' + r.status + '</span></td></tr>';
+          const pump = r.pump_running
+            ? '<span style="color:#3fb950">ON</span>'
+            : '<span style="color:#484f58">OFF</span>';
+          return '<tr>'
+            + '<td style="color:#6e7681;font-size:11px;">' + new Date(r.timestamp).toLocaleTimeString() + '</td>'
+            + '<td style="color:' + c + ';font-weight:500;">' + r.moisture_pct + '%</td>'
+            + '<td><span style="background:' + c + '22;color:' + c + ';border:1px solid ' + c + '44;border-radius:4px;padding:1px 7px;font-size:10px;">' + r.status + '</span></td>'
+            + '<td>' + pump + '</td>'
+            + '</tr>';
         }).join('');
         document.getElementById('readings-table').innerHTML = rows;
+
       } catch(e) { console.error(e); }
     }
+
     fetchReadings();
     setInterval(fetchReadings, 10000);
   </script>
