@@ -1,13 +1,10 @@
-// Save this as api/command.js in your GitHub repo
-import handler from './reading.js';
-
 let command = {
   water: false,
   auto_water: false,
   threshold: 30
 };
 
-export default function commandHandler(req, res) {
+export default function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -23,7 +20,7 @@ export default function commandHandler(req, res) {
 
   if (req.method === "GET") {
     const current = { ...command };
-    command.water = false; // reset one-shot
+    command.water = false;
     return res.status(200).json(current);
   }
 
