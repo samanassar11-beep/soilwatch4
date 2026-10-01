@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SoilWatch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap">
+<style>
+  /* Layout: status bar, then plant + pump controls side by side, then the daily schedule, then auto watering. */
+  :root {
+    --bg: #0a0e14; --card: #0d1117; --card2: #111820; --line: #21262d; --line2: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --faint: #56606b;
+    --green: #3fb950; --green-deep: #0f2a1a; --water: #3d8fbf; --warn: #d4a843; --bad: #e8722a;
+    --f-body: "DM Mono", ui-monospace, Menlo, Consolas, monospace;
+    --f-display: "Syne", "Arial Black", system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--f-body); }
+  .wrap { max-width: 1040px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: grid; gap: 16px; }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--water); outline-offset: 2px; }
+
+  /* top bar */
+  .top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 8px; font: 800 20px/1 var(--f-display); letter-spacing: -.5px; }
+  .brand svg { width: 22px; height: 22px; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px; border: 1px solid var(--line2); border-radius: 99px; font-size: 12px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .pill.on .dot { background: var(--green); box-shadow: 0 0 0 3px rgba(63,185,80,.18); }
+  .pill.off { color: var(--bad); border-color: rgba(232,114,42,.4); }
+  .pill.off .dot { background: var(--bad); }
+  .top .clock { margin-left: auto; color: var(--muted); font-size: 12px; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+  .card h2 { margin: 0; font: 700 16px/1.2 var(--f-display); letter-spacing: -.2px; }
+  .label { font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--faint); }
+  .muted { color: var(--muted); }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .grid2 { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+
+  /* plant */
+  .plant { display: grid; grid-template-columns: 150px 1fr; gap: 16px; align-items: center; }
+  @media (max-width: 420px) { .plant { grid-template-columns: 110px 1fr; } }
+  .plant svg { width: 100%; height: auto; }
+  .pct { font: 800 44px/1 var(--f-display); font-variant-numeric: tabular-nums; transition: color .8s; }
+  .pct-label { font-size: 12px; letter-spacing: 1.5px; margin-top: 4px; transition: color .8s; }
+  .spark { width: 100%; height: 64px; display: block; }
+  .spark-axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--faint); }
+  @keyframes sway { 0%,100% { transform: rotate(-1.5deg) } 50% { transform: rotate(1.5deg) } }
+  @keyframes droplet { 0% { opacity: 0; transform: translateY(-8px) } 30% { opacity: 1 } 100% { opacity: 0; transform: translateY(18px) } }
+  .sway { animation: sway 4s ease-in-out infinite; transform-origin: 50% 100%; transform-box: fill-box; }
+  .drop { animation: droplet 2s ease-in infinite; }
+  @media (prefers-reduced-motion: reduce) { .sway, .drop, .pump-on .pump-icon svg { animation: none; } }
+
+  /* pump */
+  .pump-state { display: flex; align-items: center; gap: 14px; }
+  .pump-icon { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line2); background: var(--card2); flex: none; }
+  .pump-icon svg { width: 22px; height: 22px; }
+  .pump-on .pump-icon { border-color: var(--water); background: rgba(61,143,191,.14); }
+  @keyframes pulse { 0%,100% { transform: scale(1); opacity: 1 } 50% { transform: scale(.82); opacity: .6 } }
+  .pump-on .pump-icon svg { animation: pulse 1.2s ease-in-out infinite; }
+  .state-big { font: 800 22px/1.1 var(--f-display); }
+  .state-sub { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .btn { border: 1px solid var(--line2); background: var(--card2); border-radius: 9px; padding: 9px 14px; transition: background .15s, border-color .15s; }
+  .btn:hover { border-color: var(--muted); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-go { border-color: var(--green); color: var(--green); background: var(--green-deep); font-weight: 500; }
+  .btn-go:hover { background: var(--green); color: var(--bg); }
+  .btn-stop { border-color: var(--bad); color: var(--bad); background: rgba(232,114,42,.1); font-weight: 500; }
+  .btn-stop:hover { background: var(--bad); color: var(--bg); }
+  .btn-big { width: 100%; padding: 13px; font-size: 15px; letter-spacing: .5px; }
+  .chip { border: 1px solid var(--line2); background: transparent; border-radius: 99px; padding: 6px 12px; font-size: 13px; }
+  .chip[aria-pressed="true"] { border-color: var(--water); color: var(--text); background: rgba(61,143,191,.16); }
+  .num { width: 76px; padding: 8px 10px; border: 1px solid var(--line2); background: var(--bg); border-radius: 8px; font-variant-numeric: tabular-nums; }
+  select, input[type="time"] { padding: 8px 10px; border: 1px solid var(--line2); background: var(--bg); border-radius: 8px; }
+  .feedback { font-size: 12.5px; min-height: 1.5em; color: var(--muted); }
+  .feedback.ok { color: var(--green); } .feedback.err { color: var(--bad); }
+  hr.sep { border: 0; border-top: 1px solid var(--line); margin: 0; }
+
+  /* schedule */
+  .sched-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .next { margin-left: auto; font-size: 12.5px; color: var(--muted); }
+  .next b { color: var(--text); font-weight: 500; }
+  .slots { display: grid; gap: 8px; }
+  .slot { display: grid; grid-template-columns: auto auto 1fr auto auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card2); }
+  .slot.disabled { opacity: .55; }
+  .slot .for { color: var(--faint); font-size: 12px; }
+  .slot .dur { display: flex; gap: 6px; align-items: center; }
+  .icon-btn { border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 6px 8px; color: var(--muted); }
+  .icon-btn:hover { border-color: var(--line2); color: var(--bad); }
+  @media (max-width: 560px) {
+    .slot { grid-template-columns: 1fr auto auto; row-gap: 8px; }
+    .slot .for { display: none; }
+    .slot .dur { grid-column: 1 / -1; order: 3; }
+    .slot .dur .num { flex: 1; }
+  }
+  .empty { border: 1px dashed var(--line2); border-radius: 10px; padding: 16px; color: var(--muted); font-size: 13px; }
+
+  /* switch */
+  .switch { position: relative; width: 42px; height: 24px; flex: none; }
+  .switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+  .switch span { position: absolute; inset: 0; border-radius: 24px; background: var(--line); transition: background .2s; pointer-events: none; }
+  .switch span::before { content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; border-radius: 50%; background: var(--faint); transition: transform .2s, background .2s; }
+  .switch input:checked + span { background: #1a4731; }
+  .switch input:checked + span::before { transform: translateX(18px); background: var(--green); }
+  .switch input:focus-visible + span { outline: 2px solid var(--water); outline-offset: 2px; }
+
+  input[type="range"] { width: 100%; accent-color: var(--warn); }
+  .foot { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--faint); }
+  .foot b { color: var(--muted); font-weight: 500; }
+</style>
+</head>
+<body>
+<main class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21c0-7 3-12 9-15-1 7-4 12-9 15Z" fill="#3fb950"/><path d="M12 21c0-5-2-9-8-11 0 6 3 10 8 11Z" fill="#2c7a4b"/></svg>
+      SoilWatch
+    </div>
+    <span class="pill" id="online"><span class="dot"></span><span id="online-txt">Connecting…</span></span>
+    <span class="clock" id="clock"></span>
+  </header>
+
+  <div class="grid2">
+    <!-- Moisture -->
+    <section class="card" aria-labelledby="h-moist">
+      <h2 id="h-moist" class="label">Soil moisture</h2>
+      <div class="plant">
+        <svg viewBox="40 30 140 305" role="img" aria-label="Chilli plant that fills with water as moisture rises">
+          <defs>
+            <clipPath id="chilli-clip"><path d="M110 295 C90 295 72 278 68 258 C64 238 66 210 72 190 C78 170 90 158 110 155 C130 158 142 170 148 190 C154 210 156 238 152 258 C148 278 130 295 110 295Z"/></clipPath>
+            <clipPath id="pot-clip"><path d="M78 310 L82 295 L138 295 L142 310 L148 330 L72 330 Z"/></clipPath>
+          </defs>
+          <g class="sway">
+            <path d="M110 155 C110 130 110 100 110 70" stroke="#4a7c3f" stroke-width="4" fill="none" stroke-linecap="round"/>
+            <path d="M110 120 C95 112 80 108 68 115 C80 120 95 125 110 120" fill="#5aad6e"/>
+            <path d="M110 95 C125 87 140 83 150 92 C138 97 123 100 110 95" fill="#5aad6e"/>
+            <path d="M110 135 C98 128 86 130 78 140 C90 142 102 140 110 135" fill="#4a9c5e"/>
+            <path d="M110 108 C120 100 132 100 140 108 C130 112 118 112 110 108" fill="#4a9c5e"/>
+            <path d="M110 70 C106 60 101 52 100 44 C104 46 108 50 110 55 C112 50 116 46 120 44 C119 52 114 60 110 70" fill="#e85d30"/>
+            <ellipse cx="110" cy="43" rx="4" ry="3" fill="#c94e25"/>
+          </g>
+          <path d="M110 295 C90 295 72 278 68 258 C64 238 66 210 72 190 C78 170 90 158 110 155 C130 158 142 170 148 190 C154 210 156 238 152 258 C148 278 130 295 110 295Z" fill="#0d1117"/>
+          <g clip-path="url(#chilli-clip)">
+            <rect id="water-fill" x="60" y="155" width="100" height="140" fill="#3d8fbf" opacity=".75" style="transform-origin:60px 295px;transform:scaleY(0);transition:transform 1.2s cubic-bezier(.4,0,.2,1),fill .8s"/>
+            <g id="droplets" style="opacity:0;transition:opacity .5s">
+              <circle cx="95" cy="200" r="3" fill="#fff" opacity=".4" class="drop"/>
+              <circle cx="115" cy="220" r="2" fill="#fff" opacity=".4" class="drop" style="animation-delay:.7s"/>
+              <circle cx="100" cy="240" r="2.5" fill="#fff" opacity=".4" class="drop" style="animation-delay:1.3s"/>
+            </g>
+          </g>
+          <path d="M110 295 C90 295 72 278 68 258 C64 238 66 210 72 190 C78 170 90 158 110 155 C130 158 142 170 148 190 C154 210 156 238 152 258 C148 278 130 295 110 295Z" fill="none" stroke="#4a7c3f" stroke-width="2.5"/>
+          <path d="M78 310 L82 295 L138 295 L142 310 L148 330 L72 330 Z" fill="#8B5E3C" stroke="#6b4423" stroke-width="1.5"/>
+          <rect x="76" y="294" width="68" height="6" rx="2" fill="#a0724e"/>
+        </svg>
+        <div>
+          <div class="pct" id="pct">--%</div>
+          <div class="pct-label" id="pct-label">WAITING</div>
+          <p class="muted" style="margin:10px 0 0;font-size:12px" id="raw"></p>
+        </div>
+      </div>
+      <div>
+        <svg class="spark" id="spark" viewBox="0 0 300 64" preserveAspectRatio="none" role="img" aria-label="Moisture over the last 24 hours"></svg>
+        <div class="spark-axis"><span id="spark-from">24 h ago</span><span id="spark-legend">blue ticks = watering</span><span>now</span></div>
+      </div>
+    </section>
+
+    <!-- Pump -->
+    <section class="card" id="pump-card" aria-labelledby="h-pump">
+      <h2 id="h-pump" class="label">Pump</h2>
+      <div class="pump-state" id="pump-state">
+        <div class="pump-icon"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3c3.5 4.5 6 7.6 6 10.5A6 6 0 0 1 6 13.5C6 10.6 8.5 7.5 12 3Z" fill="#3d8fbf"/></svg></div>
+        <div>
+          <div class="state-big" id="pump-big">Pump off</div>
+          <div class="state-sub" id="pump-sub">Waiting for the device</div>
+        </div>
+      </div>
+      <button class="btn btn-go btn-big" id="toggle" type="button">Turn on</button>
+      <div class="feedback" id="pump-fb" role="status"></div>
+      <hr class="sep">
+      <div class="label">Water for a set time</div>
+      <div class="row" id="chips">
+        <button class="chip" type="button" data-s="10">10 s</button>
+        <button class="chip" type="button" data-s="30" aria-pressed="true">30 s</button>
+        <button class="chip" type="button" data-s="60">1 min</button>
+        <button class="chip" type="button" data-s="120">2 min</button>
+        <button class="chip" type="button" data-s="300">5 min</button>
+      </div>
+      <div class="row">
+        <label class="muted" for="run-n">Custom</label>
+        <input class="num" id="run-n" type="number" min="1" max="3600" step="1" value="30" inputmode="numeric">
+        <select id="run-unit" aria-label="Unit"><option value="1">seconds</option><option value="60">minutes</option></select>
+        <button class="btn btn-go" id="run-go" type="button" style="margin-left:auto">Water for 30 s</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- Schedule -->
+  <section class="card" aria-labelledby="h-sched">
+    <div class="sched-head">
+      <h2 id="h-sched">Daily watering times</h2>
+      <span class="next" id="next"></span>
+    </div>
+    <p class="muted" style="margin:0;font-size:12.5px">Waters every day at each time for the length you set. The schedule is stored on the device, so it keeps running if the WiFi drops.</p>
+    <div class="slots" id="slots"></div>
+    <div class="row">
+      <button class="btn" id="add" type="button">+ Add a time</button>
+      <button class="btn btn-go" id="save" type="button" style="margin-left:auto">Save schedule</button>
+    </div>
+    <div class="feedback" id="sched-fb" role="status"></div>
+  </section>
+
+  <!-- Auto -->
+  <section class="card" aria-labelledby="h-auto">
+    <div class="row">
+      <h2 id="h-auto">Water when the soil gets dry</h2>
+      <label class="switch" style="margin-left:auto"><input type="checkbox" id="auto-on" aria-label="Water when the soil gets dry"><span></span></label>
+    </div>
+    <div class="row">
+      <label class="muted" for="auto-thr" style="min-width:150px">Below <b id="auto-thr-v" style="color:var(--warn)">30%</b></label>
+      <input type="range" id="auto-thr" min="5" max="90" step="1" value="30" style="flex:1;min-width:160px">
+    </div>
+    <div class="row">
+      <label class="muted" for="auto-sec">Water for</label>
+      <input class="num" id="auto-sec" type="number" min="1" max="600" step="1" value="10" inputmode="numeric">
+      <span class="muted">seconds, then wait 10 minutes before checking again</span>
+      <button class="btn btn-go" id="auto-save" type="button" style="margin-left:auto">Save</button>
+    </div>
+    <div class="feedback" id="auto-fb" role="status"></div>
+  </section>
+
+  <footer class="foot" id="foot"></footer>
+</main>
+
+<script>
+const API = "/api/soilwatch";
+const MAX_SLOTS = 12;
+const $ = id => document.getElementById(id);
+
+let data = null;          // last response from the server
+let offset = 0;           // server clock minus this browser's clock
+const pending = { pump: null, sched: null, auto: null };   // {id, done: msg}
+let draft = [];           // schedule being edited: {time, n, unit, on}
+let schedDirty = false;
+let autoDirty = false;
+let runSeconds = 30;
+
+// ── helpers ──────────────────────────────────────────────
+const fmtDur = s => s >= 60 && s % 60 === 0 ? `${s / 60} min` : s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`;
+const fmtClock = s => { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, "0")}`; };
+const serverNow = () => Date.now() + offset;
+const colorFor = p => p < 20 ? "#e8722a" : p < 40 ? "#d4a843" : p < 60 ? "#5aad6e" : p < 80 ? "#3d8fbf" : "#5c6bc0";
+const labelFor = p => p < 20 ? "VERY DRY" : p < 40 ? "DRY" : p < 60 ? "OPTIMAL" : p < 80 ? "MOIST" : "VERY WET";
+function ago(ms) { const s = Math.round(ms / 1000); if (s < 60) return `${s}s ago`; const m = Math.round(s / 60); if (m < 60) return `${m} min ago`; return `${Math.round(m / 60)} h ago`; }
+function feedback(el, text, kind = "") { el.textContent = text; el.className = "feedback" + (kind ? " " + kind : ""); }
+
+async function send(cmd) {
+  const r = await fetch(`${API}?from=app`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cmd) });
+  let j = {}; try { j = await r.json(); } catch {}
+  if (!r.ok) throw new Error(j.error || "The server didn't accept that. Try again.");
+  return j.id;
+}
+const acked = id => data?.status && data.status.ack >= id;
+
+// ── moisture ────────────────────────────────────────────
+function renderMoisture(st) {
+  const p = st ? st.pct : null;
+  if (p == null) return;
+  const c = colorFor(p);
+  $("water-fill").style.transform = `scaleY(${p / 100})`;
+  $("water-fill").setAttribute("fill", c);
+  $("droplets").style.opacity = (st.pump || p > 60) ? 1 : 0;
+  $("pct").textContent = `${p}%`; $("pct").style.color = c;
+  $("pct-label").textContent = labelFor(p); $("pct-label").style.color = c;
+  $("raw").textContent = `Sensor reading ${st.raw}`;
+}
+function renderSpark(hist) {
+  const svg = $("spark");
+  if (!hist || hist.length < 2) { svg.innerHTML = `<text x="150" y="36" text-anchor="middle" fill="#56606b" font-size="11" font-family="DM Mono, monospace">History appears after a few minutes</text>`; return; }
+  const t1 = serverNow(), t0 = t1 - 24 * 3600e3;
+  const X = t => ((t - t0) / (t1 - t0)) * 300, Y = p => 60 - (p / 100) * 56;
+  const pts = hist.map(h => `${X(h[0]).toFixed(1)},${Y(h[1]).toFixed(1)}`);
+  const first = X(hist[0][0]).toFixed(1), last = X(hist[hist.length - 1][0]).toFixed(1);
+  const ticks = hist.filter(h => h[2]).map(h => `<line x1="${X(h[0]).toFixed(1)}" x2="${X(h[0]).toFixed(1)}" y1="60" y2="64" stroke="#3d8fbf" stroke-width="1.5"/>`).join("");
+  const grid = [25, 50, 75].map(p => `<line x1="0" x2="300" y1="${Y(p)}" y2="${Y(p)}" stroke="#21262d" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join("");
+  const lp = hist[hist.length - 1];
+  svg.innerHTML = grid +
+    `<polygon points="${first},60 ${pts.join(" ")} ${last},60" fill="rgba(61,143,191,.14)"/>` +
+    `<polyline points="${pts.join(" ")}" fill="none" stroke="${colorFor(lp[1])}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>` +
+    `<circle cx="${X(lp[0]).toFixed(1)}" cy="${Y(lp[1]).toFixed(1)}" r="2.5" fill="${colorFor(lp[1])}"/>` + ticks;
+}
+
+// ── pump ────────────────────────────────────────────────
+function pumpLeft(st) { return st.left - (serverNow() - st.at) / 1000; }
+function renderPump() {
+  const st = data?.status;
+  const on = !!(st && st.pump && pumpLeft(st) > 0);
+  $("pump-card").classList.toggle("pump-on", on);
+  const t = $("toggle");
+  t.textContent = on ? "Turn off" : "Turn on";
+  t.className = "btn btn-big " + (on ? "btn-stop" : "btn-go");
+  t.disabled = !st;
+  if (!st) { $("pump-big").textContent = "Pump off"; $("pump-sub").textContent = "Waiting for the device"; return; }
+  if (!on) {
+    $("pump-big").textContent = "Pump off";
+    $("pump-sub").textContent = "Ready";
+  } else {
+    const left = fmtClock(pumpLeft(st));
+    $("pump-big").textContent = "Pump on";
+    $("pump-sub").textContent =
+      st.mode === "manual"   ? `On until you turn it off · safety cut-off in ${left}` :
+      st.mode === "timer"    ? `Timed watering · ${left} left` :
+      st.mode === "schedule" ? `Scheduled watering · ${left} left` :
+      st.mode === "auto"     ? `Soil was dry · ${left} left` : `${left} left`;
+  }
+}
+function trackPump(id, doneMsg) {
+  pending.pump = { id, doneMsg };
+  feedback($("pump-fb"), data?.online ? "Sending to the device…" : "Queued. The device will do this if it reconnects within 10 minutes.");
+}
+function renderPumpFeedback() {
+  const p = pending.pump; if (!p) return;
+  if (acked(p.id)) { feedback($("pump-fb"), p.doneMsg, "ok"); pending.pump = null; setTimeout(() => { if (!pending.pump) feedback($("pump-fb"), ""); }, 4000); }
+}
+$("toggle").addEventListener("click", async () => {
+  const st = data?.status; const on = !!(st && st.pump && pumpLeft(st) > 0);
+  const t = $("toggle"); t.disabled = true;
+  try { const id = await send({ type: on ? "off" : "on" }); trackPump(id, on ? "Pump turned off." : "Pump is on. Press Turn off to stop it."); }
+  catch (e) { feedback($("pump-fb"), e.message, "err"); }
+  finally { t.disabled = false; refresh(); }
+});
+
+// timed run
+function setRunSeconds(s) {
+  runSeconds = s;
+  $("run-go").textContent = `Water for ${fmtDur(s)}`;
+  document.querySelectorAll("#chips .chip").forEach(c => c.setAttribute("aria-pressed", String(+c.dataset.s === s)));
+}
+document.querySelectorAll("#chips .chip").forEach(c => c.addEventListener("click", () => {
+  const s = +c.dataset.s; setRunSeconds(s);
+  if (s % 60 === 0) { $("run-n").value = s / 60; $("run-unit").value = "60"; } else { $("run-n").value = s; $("run-unit").value = "1"; }
+}));
+function customRun() {
+  const n = Math.round(+$("run-n").value), u = +$("run-unit").value, s = n * u;
+  if (n >= 1 && s <= 3600) setRunSeconds(s);
+}
+$("run-n").addEventListener("input", customRun);
+$("run-unit").addEventListener("change", customRun);
+$("run-go").addEventListener("click", async () => {
+  const n = Math.round(+$("run-n").value), s = n * +$("run-unit").value;
+  if (!(n >= 1) || s > 3600) { feedback($("pump-fb"), "Pick a time between 1 second and 60 minutes.", "err"); return; }
+  $("run-go").disabled = true;
+  try { const id = await send({ type: "run", seconds: s }); trackPump(id, `Watering for ${fmtDur(s)}.`); }
+  catch (e) { feedback($("pump-fb"), e.message, "err"); }
+  finally { $("run-go").disabled = false; refresh(); }
+});
+
+// ── schedule ────────────────────────────────────────────
+const toRow = it => (it.seconds % 60 === 0 && it.seconds >= 60)
+  ? { time: it.time, n: it.seconds / 60, unit: 60, on: it.on !== false }
+  : { time: it.time, n: it.seconds, unit: 1, on: it.on !== false };
+const rowSeconds = r => Math.round(+r.n) * r.unit;
+const sameSchedule = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const draftItems = () => draft.map(r => ({ time: r.time, seconds: rowSeconds(r), on: r.on })).sort((a, b) => a.time.localeCompare(b.time));
+
+function renderSlots() {
+  const box = $("slots"); box.innerHTML = "";
+  if (!draft.length) {
+    box.innerHTML = `<div class="empty">No watering times yet. Add one to water every day at a set time, for example 12:00 for 15 seconds.</div>`;
+  }
+  draft.forEach((r, i) => {
+    const el = document.createElement("div");
+    el.className = "slot" + (r.on ? "" : " disabled");
+    el.innerHTML = `
+      <input type="time" step="60" value="${r.time}" id="t${i}" aria-label="Time">
+      <span class="for">for</span>
+      <span class="dur">
+        <input class="num" type="number" min="1" max="3600" step="1" value="${r.n}" id="n${i}" aria-label="Duration" inputmode="numeric">
+        <select id="u${i}" aria-label="Unit"><option value="1"${r.unit === 1 ? " selected" : ""}>seconds</option><option value="60"${r.unit === 60 ? " selected" : ""}>minutes</option></select>
+      </span>
+      <label class="switch" title="On / off"><input type="checkbox" id="o${i}" ${r.on ? "checked" : ""} aria-label="Use this time"><span></span></label>
+      <button class="icon-btn" type="button" id="d${i}" aria-label="Remove ${r.time}">Remove</button>`;
+    box.appendChild(el);
+    const dirty = () => { schedDirty = true; renderSchedStatus(); renderNext(); };
+    el.querySelector(`#t${i}`).addEventListener("change", e => { r.time = e.target.value || r.time; dirty(); });
+    el.querySelector(`#n${i}`).addEventListener("input", e => { r.n = e.target.value; dirty(); });
+    el.querySelector(`#u${i}`).addEventListener("change", e => { r.unit = +e.target.value; dirty(); });
+    el.querySelector(`#o${i}`).addEventListener("change", e => { r.on = e.target.checked; el.classList.toggle("disabled", !r.on); dirty(); });
+    el.querySelector(`#d${i}`).addEventListener("click", () => { draft.splice(i, 1); schedDirty = true; renderSlots(); renderSchedStatus(); renderNext(); });
+  });
+  $("add").disabled = draft.length >= MAX_SLOTS;
+}
+$("add").addEventListener("click", () => {
+  if (draft.length >= MAX_SLOTS) return;
+  const last = draft[draft.length - 1];
+  let time = "12:00";
+  if (last) { const [h, m] = last.time.split(":").map(Number); const t = (h * 60 + m + 30) % 1440; time = `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`; }
+  draft.push({ time, n: 15, unit: 1, on: true });
+  schedDirty = true; renderSlots(); renderSchedStatus(); renderNext();
+  document.getElementById(`t${draft.length - 1}`)?.focus();
+});
+function validateDraft() {
+  const seen = new Set();
+  for (const r of draft) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(r.time)) return "Each time needs hours and minutes.";
+    const s = rowSeconds(r);
+    if (!(+r.n >= 1) || s > 3600) return `The ${r.time} watering must be between 1 second and 60 minutes.`;
+    if (seen.has(r.time)) return `${r.time} is listed twice. Remove one.`;
+    seen.add(r.time);
+  }
+  return null;
+}
+$("save").addEventListener("click", async () => {
+  const err = validateDraft(); if (err) { feedback($("sched-fb"), err, "err"); return; }
+  $("save").disabled = true;
+  try {
+    const items = draftItems();
+    const id = await send({ type: "schedule", items });
+    pending.sched = { id, items };
+    renderSchedStatus();
+  } catch (e) { feedback($("sched-fb"), e.message, "err"); }
+  finally { $("save").disabled = false; refresh(); }
+});
+function renderSchedStatus() {
+  const fb = $("sched-fb");
+  const p = pending.sched;
+  if (p) {
+    if (acked(p.id)) { pending.sched = null; if (sameSchedule(p.items, draftItems())) schedDirty = false; feedback(fb, "Saved on the device.", "ok"); return; }
+    feedback(fb, data?.online ? "Sending to the device…" : "Saved. The device will pick this up when it's back online.");
+    return;
+  }
+  if (schedDirty) feedback(fb, "Unsaved changes.");
+  else if (fb.classList.contains("ok")) return;
+  else feedback(fb, "");
+}
+function syncScheduleFromDevice() {
+  if (schedDirty || pending.sched) return;
+  const dev = (data?.status?.sched || []).map(toRow);
+  if (!sameSchedule(dev, draft)) { draft = dev; renderSlots(); }
+}
+
+// next watering, from the device's own clock
+function deviceMinutesNow() {
+  const st = data?.status; if (!st || !st.synced || !st.clock) return null;
+  const [h, m, s] = st.clock.split(":").map(Number);
+  const secs = (h * 3600 + m * 60 + s + (serverNow() - st.at) / 1000) % 86400;
+  return secs / 60;
+}
+function renderNext() {
+  const el = $("next"), now = deviceMinutesNow();
+  const items = draftItems().filter(i => i.on);
+  if (!items.length) { el.textContent = ""; return; }
+  if (now == null) { el.textContent = "Waiting for the device clock"; return; }
+  const mins = t => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+  let next = items.find(i => mins(i.time) > now), when = "today";
+  if (!next) { next = items[0]; when = "tomorrow"; }
+  el.innerHTML = `Next: <b>${when} ${next.time}</b> for ${fmtDur(next.seconds)}${schedDirty ? " (once saved)" : ""}`;
+}
+
+// ── auto watering ───────────────────────────────────────
+["auto-on", "auto-thr", "auto-sec"].forEach(id => $(id).addEventListener("input", () => {
+  autoDirty = true; $("auto-thr-v").textContent = `${$("auto-thr").value}%`; feedback($("auto-fb"), "Unsaved changes.");
+}));
+$("auto-save").addEventListener("click", async () => {
+  const sec = Math.round(+$("auto-sec").value);
+  if (!(sec >= 1 && sec <= 600)) { feedback($("auto-fb"), "Water for 1 to 600 seconds.", "err"); return; }
+  $("auto-save").disabled = true;
+  try {
+    const id = await send({ type: "auto", enabled: $("auto-on").checked, threshold: +$("auto-thr").value, seconds: sec });
+    pending.auto = { id }; feedback($("auto-fb"), data?.online ? "Sending to the device…" : "Saved. The device will pick this up when it's back online.");
+  } catch (e) { feedback($("auto-fb"), e.message, "err"); }
+  finally { $("auto-save").disabled = false; refresh(); }
+});
+function syncAuto() {
+  if (pending.auto && acked(pending.auto.id)) { pending.auto = null; autoDirty = false; feedback($("auto-fb"), "Saved on the device.", "ok"); }
+  const a = data?.status?.auto; if (!a || autoDirty || pending.auto) return;
+  $("auto-on").checked = !!a.enabled; $("auto-thr").value = a.threshold; $("auto-thr-v").textContent = `${a.threshold}%`; $("auto-sec").value = a.seconds;
+}
+
+// ── status bar & footer ─────────────────────────────────
+function renderTop() {
+  const pill = $("online"), st = data?.status;
+  if (!data) return;
+  if (!st) { pill.className = "pill"; $("online-txt").textContent = "No device yet"; }
+  else if (data.online) { pill.className = "pill on"; $("online-txt").textContent = "Device online"; }
+  else { pill.className = "pill off"; $("online-txt").textContent = `Offline · last seen ${ago(serverNow() - data.seen)}`; }
+  const now = deviceMinutesNow();
+  if (now != null) {
+    const h = Math.floor(now / 60), m = Math.floor(now % 60);
+    $("clock").textContent = `Device clock ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")} ${st.zone || ""}`;
+  } else if (st) $("clock").textContent = "Device clock not set yet";
+  if (st) {
+    const up = st.up >= 86400 ? `${Math.floor(st.up / 86400)} d` : st.up >= 3600 ? `${Math.floor(st.up / 3600)} h` : `${Math.floor(st.up / 60)} min`;
+    $("foot").innerHTML = `<span>WiFi <b>${st.rssi} dBm</b></span><span>Running <b>${up}</b></span><span>Checked in <b>${ago(serverNow() - st.at)}</b></span><span>Storage <b>${data.storage}</b></span>`;
+  }
+}
+
+// ── loop ────────────────────────────────────────────────
+async function refresh() {
+  try {
+    const r = await fetch(`${API}?hours=24`, { cache: "no-store" });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Server error");
+    offset = d.now - Date.now(); data = d;
+    renderMoisture(d.status); renderSpark(d.history);
+    syncScheduleFromDevice(); syncAuto();
+    renderAll();
+  } catch (e) {
+    $("online").className = "pill off"; $("online-txt").textContent = "Can't reach the server";
+  }
+}
+function renderAll() { renderTop(); renderPump(); renderPumpFeedback(); renderSchedStatus(); renderNext(); }
+
+renderSlots(); setRunSeconds(30); refresh();
+setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 3000);
+setInterval(() => { if (data) { renderTop(); renderPump(); renderNext(); } }, 1000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refresh(); });
+</script>
+</body>
+</html>
